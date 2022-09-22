@@ -38,11 +38,22 @@ async function run() {
         const serviceCollection = client.db("doctor-portal").collection("services")
         const bookingCollection = client.db("doctor-portal").collection("bookings")
         const userCollection = client.db("doctor-portal").collection("users")
+        const doctorCollection = client.db("doctor-portal").collection("doctors")
 
+        const veryFlyAdmit = async (req,res,next) => {
+            const requester = req.decoded.email;
+            const requesterAccount = await userCollection.findOne({email : requester})
+            if(requesterAccount.role === 'admit'){
+                next()
+            }
+            else{
+                res.status(403).send({ massage: 'Forbidden access' })
+            }
+        }
 
         app.get('/services', async (req, res) => {
             const query = {}
-            const cursor = serviceCollection.find(query)
+            const cursor = serviceCollection.find(query).project({name : 1});
             const result = await cursor.toArray()
             res.send(result)
 
@@ -71,21 +82,14 @@ async function run() {
             })
             res.send(services)
         });
-        app.put('/user/admit/:email', veryFlyJWT, async (req, res) => {
+        app.put('/user/admit/:email', veryFlyJWT,veryFlyAdmit, async (req, res) => {
                const email = req.params.email
-            const requester = req.decoded.email;
-            const requesterAccount = await userCollection.findOne({email : requester})
-            if(requesterAccount.role === 'admit'){
                 const filter = { email: email }
                 const updateDoc = {
                     $set: { role: 'admit' },
                 }
                 const result = await userCollection.updateOne(filter, updateDoc)
                 res.send({ result })
-            }
-            else{
-                res.status(403).send({ massage: 'Forbidden access' })
-            }
             
         });
 
@@ -131,6 +135,15 @@ async function run() {
             }
             const result = await bookingCollection.insertOne(booking)
             res.send({ success: true, result })
+        })
+        app.get('/doctors',veryFlyJWT,veryFlyAdmit,async(req,res)=> {
+            const doctor = await doctorCollection.find().toArray()
+            res.send(doctor)
+        })
+        app.post('/doctor', veryFlyJWT,veryFlyAdmit, async (req,res) => {
+            const doctor = req.body
+            const result = await doctorCollection.insertOne(doctor)
+            res.send(result)
         })
     }
     finally {
